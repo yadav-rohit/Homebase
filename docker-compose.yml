@@ -1,0 +1,129 @@
+version: "3.8"
+
+services:
+  # Apple Silicon (M1/M2/M3) configuration
+  ollama-apple:
+    image: ollama/ollama:latest
+    profiles: ["apple"]
+    volumes:
+      - ollama_data:/root/.ollama
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+    environment:
+      OLLAMA_SKIP_TLS_VERIFY: "true"
+      SSL_CERT_DIR: /etc/ssl/certs
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_METAL: 1
+      OLLAMA_CONCURRENT: 4
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ollama_network
+
+  # NVIDIA GPU configuration
+  ollama-nvidia:
+    image: ollama/ollama:latest
+    profiles: ["nvidia"]
+    volumes:
+      - ollama_data:/root/.ollama
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      OLLAMA_SKIP_TLS_VERIFY: "true"
+      SSL_CERT_DIR: /etc/ssl/certs
+      OLLAMA_HOST: 0.0.0.0
+      NVIDIA_VISIBLE_DEVICES: all
+      OLLAMA_CONCURRENT: 4
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ollama_network
+
+  # AMD GPU configuration
+  ollama-amd:
+    image: ollama/ollama:latest
+    profiles: ["amd"]
+    volumes:
+      - ollama_data:/root/.ollama
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    environment:
+      OLLAMA_SKIP_TLS_VERIFY: "true"
+      SSL_CERT_DIR: /etc/ssl/certs
+      OLLAMA_HOST: 0.0.0.0
+      HSA_OVERRIDE_GFX_VERSION: "10.3.0"
+      OLLAMA_CONCURRENT: 2
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ollama_network
+
+  # CPU-only configuration
+  ollama-cpu:
+    image: ollama/ollama:latest
+    profiles: ["cpu"]
+    volumes:
+      - ollama_data:/root/.ollama
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+    environment:
+      OLLAMA_SKIP_TLS_VERIFY: "true"
+      SSL_CERT_DIR: /etc/ssl/certs
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_CONCURRENT: 1
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ollama_network
+
+  # Streamlit application
+  streamlit:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      OLLAMA_HOST: "http://ollama-nvidia:11434" # Change this to point to the service name
+    restart: unless-stopped
+    depends_on:
+      - ollama-nvidia # or the appropriate ollama service depending on what profile you're using
+    networks:
+      - ollama_network
+
+volumes:
+  ollama_data:
+
+networks:
+  ollama_network:
+    driver: bridge
